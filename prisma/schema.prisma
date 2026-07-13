@@ -1,0 +1,138 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  id        String   @id @default(cuid())
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  entries        KnowledgeEntry[]
+  modules        ProjectModule[]
+  timelineEvents TimelineEvent[]
+}
+
+model KnowledgeEntry {
+  id               String   @id @default(cuid())
+  projectId        String
+  filename         String
+  originalFileType String
+  sourceType       String
+  uploadedBy       String
+  uploadedAt       DateTime @default(now())
+  originalFilePath String
+  masterTranscript String   @db.Text
+
+  // Deprecated nullable fields — superseded by KnowledgeExtraction relation
+  aiSummary String?  @db.Text
+  category  String?
+  modules   String?  @db.Text
+
+  project        Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  extraction     KnowledgeExtraction?
+  entryModules   KnowledgeEntryModule[]
+  embedding      KnowledgeEmbedding?
+  relatedFrom    RelatedDocument[]     @relation("EntryRelated")
+  relatedTo      RelatedDocument[]     @relation("RelatedEntries")
+  timelineEvents TimelineEvent[]
+
+  @@index([projectId])
+}
+
+model KnowledgeExtraction {
+  id               String   @id @default(cuid())
+  knowledgeEntryId String   @unique
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  status  String  @default("pending")
+  error   String? @db.Text
+
+  summary         String?  @db.Text
+  changeRequests  Json     @default("[]")
+  actionItems     Json     @default("[]")
+  projectModules  Json     @default("[]")
+  mentionedAssets Json     @default("[]")
+  peopleMentioned Json     @default("[]")
+  decisions       Json     @default("[]")
+  priority        String?
+
+  entry KnowledgeEntry @relation(fields: [knowledgeEntryId], references: [id], onDelete: Cascade)
+}
+
+model KnowledgeEmbedding {
+  id               String   @id @default(cuid())
+  knowledgeEntryId String   @unique
+  embedding        Json
+  model            String
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  entry KnowledgeEntry @relation(fields: [knowledgeEntryId], references: [id], onDelete: Cascade)
+}
+
+model RelatedDocument {
+  id             String   @id @default(cuid())
+  entryId        String
+  relatedEntryId String
+  score          Float
+  createdAt      DateTime @default(now())
+
+  entry        KnowledgeEntry @relation("EntryRelated",   fields: [entryId],        references: [id], onDelete: Cascade)
+  relatedEntry KnowledgeEntry @relation("RelatedEntries", fields: [relatedEntryId], references: [id], onDelete: Cascade)
+
+  @@unique([entryId, relatedEntryId])
+  @@index([entryId])
+}
+
+model ProjectModule {
+  id          String   @id @default(cuid())
+  projectId   String
+  name        String
+  description String?
+  color       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  project      Project               @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entryModules KnowledgeEntryModule[]
+
+  @@unique([projectId, name])
+  @@index([projectId])
+}
+
+model TimelineEvent {
+  id          String   @id @default(cuid())
+  projectId   String
+  entryId     String?
+  eventType   String
+  title       String
+  description Json     @default("{}")
+  actor       String?
+  createdAt   DateTime @default(now())
+
+  project Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  entry   KnowledgeEntry? @relation(fields: [entryId], references: [id], onDelete: SetNull)
+
+  @@index([projectId])
+  @@index([projectId, eventType])
+  @@index([createdAt])
+}
+
+// Explicit join table for the many-to-many between KnowledgeEntry and ProjectModule
+model KnowledgeEntryModule {
+  entryId  String
+  moduleId String
+  assignedAt DateTime @default(now())
+
+  entry  KnowledgeEntry @relation(fields: [entryId], references: [id], onDelete: Cascade)
+  module ProjectModule  @relation(fields: [moduleId], references: [id], onDelete: Cascade)
+
+  @@id([entryId, moduleId])
+}
