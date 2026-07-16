@@ -179,6 +179,72 @@ Do not add headings that are not in the original document.
 Begin extraction now:`,
 
 
+  xlsx: `You are a forensic transcription engine. Your only job is to preserve spreadsheet data exactly as provided.
+
+${BASE_RULES}
+
+The spreadsheet data has been pre-extracted and is provided as structured text below.
+Your job is to reformat it cleanly into Markdown tables — do NOT alter any values.
+
+Output structure:
+
+## Spreadsheet
+
+For each sheet provided, output:
+
+### Sheet: <sheet name>
+
+Render the data as a Markdown table with proper column headers.
+If there are no headers in the data, use Column 1, Column 2, etc.
+Preserve every cell value exactly — numbers, dates, formulas as text, empty cells as blank table cells.
+
+Begin extraction now:`,
+
+
+  csv: `You are a forensic transcription engine. Your only job is to preserve CSV data exactly as provided.
+
+${BASE_RULES}
+
+The CSV data has been pre-extracted and is provided as structured text below.
+Your job is to reformat it cleanly into a Markdown table — do NOT alter any values.
+
+Output structure:
+
+## CSV Data
+
+Render the data as a Markdown table.
+Use the first row as column headers if present.
+Preserve every cell value exactly — numbers, text, empty cells as blank table cells.
+
+Begin extraction now:`,
+
+
+  pptx: `You are a forensic transcription engine. Your only job is to extract visible text from a PowerPoint presentation.
+
+${BASE_RULES}
+
+The presentation content has been pre-extracted and is provided as structured text below.
+Your job is to reformat it cleanly — do NOT alter any content.
+
+Output structure:
+
+## Presentation
+
+For each slide provided, output:
+
+### Slide <N>
+
+**Title:** <slide title exactly as written, omit if absent>
+
+**Body:**
+<All body text exactly as written, preserving bullet points with - markers>
+
+**Notes:**
+<Speaker notes exactly as written, omit section if no notes>
+
+Begin extraction now:`,
+
+
   text: `You are a forensic transcription engine. Your only job is to preserve plain text exactly.
 
 ${BASE_RULES}
@@ -209,10 +275,58 @@ function detectFileType(mimeType: string, fileName: string): SupportedFileType {
     mimeType === "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     fileName.toLowerCase().endsWith(".docx")
   ) return "docx";
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" ||
+    fileName.toLowerCase().endsWith(".xlsx")
+  ) return "xlsx";
+  if (
+    mimeType === "text/csv" ||
+    mimeType === "application/csv" ||
+    fileName.toLowerCase().endsWith(".csv")
+  ) return "csv";
+  if (
+    mimeType === "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    fileName.toLowerCase().endsWith(".pptx")
+  ) return "pptx";
   if (mimeType === "text/plain") return "text";
   throw new Error(
-    `Unsupported file type: ${mimeType}. Supported: images (PNG/JPG/WEBP), PDF, DOCX, plain text.`
+    `Unsupported file type: ${mimeType} (${fileName}). Supported: images (PNG/JPG/WEBP), PDF, DOCX, XLSX, CSV, PPTX, plain text.`
   );
+}
+
+// ── Pre-processors ─────────────────────────────────────────────────────────────
+// These convert binary formats to plain text before sending to Gemini.
+// Gemini never receives binary XLSX/CSV/PPTX — only structured text derived from them.
+
+function extractXlsx(buffer: Buffer): string {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const XLSX = require("xlsx") as typeof import("xlsx");
+  const workbook = XLSX.read(buffer, { type: "buffer", cellDates: true });
+
+  const sections: string[] = [];
+  for (const sheetName of workbook.SheetNames) {
+    const sheet = workbook.Sheets[sheetName];
+    // sheet_to_csv preserves structure faithfully; we wrap it so Gemini sees the sheet name
+    const csv = XLSX.utils.sheet_to_csv(sheet, { blankrows: false });
+    if (csv.trim().length === 0) continue;
+    sections.push(`[Sheet: ${sheetName}]\n${csv}`);
+  }
+
+  return sections.join("\n\n");
+}
+
+function extractCsv(buffer: Buffer): string {
+  // CSV is plain text — decode and return directly
+  return buffer.toString("utf-8");
+}
+
+async function extractPptx(buffer: Buffer): Promise<string> {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const officeparser = require("officeparser") as {
+    parseOfficeAsync: (input: Buffer | string, config?: Record<string, unknown>) => Promise<string>;
+  };
+  const text = await officeparser.parseOfficeAsync(buffer, { outputErrorToConsole: false });
+  return text;
 }
 
 /**
@@ -228,6 +342,9 @@ export function buildTranscriptHeader(opts: {
     image: "Image",
     pdf: "PDF",
     docx: "DOCX",
+    xlsx: "Spreadsheet (XLSX)",
+    csv: "CSV",
+    pptx: "Presentation (PPTX)",
     text: "Plain Text",
     "plain-text": "Plain Text",
   };
@@ -306,7 +423,26 @@ export class GeminiProcessor implements DocumentProcessorInterface {
         warnings.push(...result.messages.map((m) => m.message));
       }
       parts = [{ text: PROMPTS.docx }, { text: result.value }];
+
+    } else if (fileType === "xlsx") {
+      console.log("[GeminiProcessor] Extracting XLSX data with xlsx library...");
+      const extracted = extractXlsx(buffer);
+      console.log(`[GeminiProcessor] Extracted ${extracted.length} chars from XLSX`);
+      parts = [{ text: PROMPTS.xlsx }, { text: extracted }];
+
+    } else if (fileType === "csv") {
+      console.log("[GeminiProcessor] Decoding CSV...");
+      const extracted = extractCsv(buffer);
+      parts = [{ text: PROMPTS.csv }, { text: extracted }];
+
+    } else if (fileType === "pptx") {
+      console.log("[GeminiProcessor] Extracting PPTX text with officeparser...");
+      const extracted = await extractPptx(buffer);
+      console.log(`[GeminiProcessor] Extracted ${extracted.length} chars from PPTX`);
+      parts = [{ text: PROMPTS.pptx }, { text: extracted }];
+
     } else {
+      // image, pdf, text — send as inline binary data
       const base64 = buffer.toString("base64");
       const prompt = PROMPTS[fileType] ?? PROMPTS.image;
       parts = [

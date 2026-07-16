@@ -1,4 +1,4 @@
-export type SupportedFileType = "image" | "pdf" | "docx" | "text" | "plain-text";
+export type SupportedFileType = "image" | "pdf" | "docx" | "xlsx" | "csv" | "pptx" | "text" | "plain-text";
 
 export type ExtractionResult = {
   extractedText: string;
