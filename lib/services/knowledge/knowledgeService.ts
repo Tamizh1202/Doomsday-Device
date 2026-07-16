@@ -4,24 +4,51 @@ import path from "path";
 import fs from "fs/promises";
 
 const UPLOADS_DIR = path.join(process.cwd(), "uploads");
+const USE_BLOB = !!process.env.BLOB_READ_WRITE_TOKEN;
 
 export type KnowledgeEntryWithProject = KnowledgeEntry & { project: Project };
 
-/** Ensure the uploads directory exists. */
 async function ensureUploadsDir() {
   await fs.mkdir(UPLOADS_DIR, { recursive: true });
 }
 
-/** Save a file buffer to disk. Returns the relative file path. */
+/**
+ * Save a file buffer.
+ * - Production (Vercel): uploads to Vercel Blob, returns the public blob URL.
+ * - Development (local): saves to ./uploads/, returns the stored filename.
+ */
 export async function saveFile(buffer: Buffer, filename: string): Promise<string> {
-  await ensureUploadsDir();
   const timestamp = Date.now();
   const safe = filename.replace(/[^a-zA-Z0-9._-]/g, "_");
   const storedName = `${timestamp}_${safe}`;
+
+  if (USE_BLOB) {
+    const { put } = await import("@vercel/blob");
+    const blob = await put(`uploads/${storedName}`, buffer, { access: "public" });
+    console.log(`[KnowledgeService] Uploaded to Vercel Blob: ${blob.url}`);
+    return blob.url;
+  }
+
+  await ensureUploadsDir();
   const fullPath = path.join(UPLOADS_DIR, storedName);
   await fs.writeFile(fullPath, buffer);
-  console.log(`[KnowledgeService] Saving original file: ${fullPath}`);
+  console.log(`[KnowledgeService] Saved local file: ${fullPath}`);
   return storedName;
+}
+
+/**
+ * Read a stored file.
+ * - If storedFilename is a URL (blob), fetch it.
+ * - Otherwise read from local disk.
+ */
+export async function readStoredFile(storedFilename: string): Promise<Buffer> {
+  if (storedFilename.startsWith("http://") || storedFilename.startsWith("https://")) {
+    const res = await fetch(storedFilename);
+    if (!res.ok) throw new Error(`Failed to fetch blob: ${res.statusText}`);
+    return Buffer.from(await res.arrayBuffer());
+  }
+  const fullPath = path.join(UPLOADS_DIR, storedFilename);
+  return fs.readFile(fullPath);
 }
 
 /** Get or create the default project. */
@@ -40,11 +67,9 @@ export type CreateEntryInput = {
   masterTranscript: string;
 };
 
-/** Persist a KnowledgeEntry to the database. */
 export async function createKnowledgeEntry(input: CreateEntryInput): Promise<KnowledgeEntry> {
   const project = await getDefaultProject();
   console.log("[KnowledgeService] Creating Knowledge Entry...");
-
   const entry = await prisma.knowledgeEntry.create({
     data: {
       projectId: project.id,
@@ -56,12 +81,10 @@ export async function createKnowledgeEntry(input: CreateEntryInput): Promise<Kno
       masterTranscript: input.masterTranscript,
     },
   });
-
   console.log(`[KnowledgeService] Knowledge Entry created: ${entry.id}`);
   return entry;
 }
 
-/** List all knowledge entries for the default project, newest first. */
 export async function listKnowledgeEntries(): Promise<KnowledgeEntryWithProject[]> {
   const project = await getDefaultProject();
   return prisma.knowledgeEntry.findMany({
@@ -71,16 +94,9 @@ export async function listKnowledgeEntries(): Promise<KnowledgeEntryWithProject[
   });
 }
 
-/** Get a single knowledge entry by ID. */
 export async function getKnowledgeEntry(id: string): Promise<KnowledgeEntryWithProject | null> {
   return prisma.knowledgeEntry.findUnique({
     where: { id },
     include: { project: true },
   });
-}
-
-/** Read a stored file and return its buffer. */
-export async function readStoredFile(storedFilename: string): Promise<Buffer> {
-  const fullPath = path.join(UPLOADS_DIR, storedFilename);
-  return fs.readFile(fullPath);
 }

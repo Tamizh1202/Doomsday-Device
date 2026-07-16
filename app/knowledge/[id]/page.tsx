@@ -40,6 +40,11 @@ export default async function KnowledgeDetailPage({
   if (!entry) notFound();
 
   const hasFile = entry.originalFilePath && entry.originalFilePath.length > 0;
+  const fileUrl = entry.originalFilePath?.startsWith("http")
+    ? entry.originalFilePath
+    : entry.originalFilePath
+      ? `/api/uploads/${entry.originalFilePath}`
+      : null;
 
   return (
     <main className="p-8">
@@ -70,7 +75,7 @@ export default async function KnowledgeDetailPage({
           <h2 className="font-semibold text-gray-900 text-lg">Original File</h2>
           {hasFile ? (
             <a
-              href={`/api/uploads/${entry.originalFilePath}`}
+              href={fileUrl ?? "#"}
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center gap-2 px-4 py-2 bg-gray-100 border border-gray-300 rounded text-sm font-medium text-gray-700 hover:bg-gray-200"

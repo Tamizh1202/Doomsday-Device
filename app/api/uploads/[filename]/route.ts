@@ -13,9 +13,13 @@ export async function GET(
       return NextResponse.json({ error: "Invalid filename." }, { status: 400 });
     }
 
+    // If stored as a blob URL, redirect directly — no need to proxy
+    if (filename.startsWith("http")) {
+      return NextResponse.redirect(decodeURIComponent(filename));
+    }
+
     const buffer = await readStoredFile(filename);
 
-    // Derive a content-type from extension
     const ext = filename.split(".").pop()?.toLowerCase() ?? "";
     const contentTypeMap: Record<string, string> = {
       pdf: "application/pdf",
