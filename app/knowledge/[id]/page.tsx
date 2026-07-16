@@ -6,6 +6,7 @@ import { ExtractionPanel } from "./ExtractionPanel";
 import { ModuleBadges } from "./ModuleBadges";
 import { RelatedDocuments } from "./RelatedDocuments";
 import { PipelineStatus } from "./PipelineStatus";
+import { getFileUrl } from "@/lib/services/knowledge/knowledgeService";
 
 async function getEntry(id: string): Promise<KnowledgeEntryRow | null> {
   const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
@@ -40,11 +41,15 @@ export default async function KnowledgeDetailPage({
   if (!entry) notFound();
 
   const hasFile = entry.originalFilePath && entry.originalFilePath.length > 0;
-  const fileUrl = entry.originalFilePath?.startsWith("http")
-    ? entry.originalFilePath
-    : entry.originalFilePath
-      ? `/api/uploads/${entry.originalFilePath}`
-      : null;
+  let fileUrl: string | null = null;
+  if (entry.originalFilePath) {
+    if (entry.originalFilePath.startsWith("http")) {
+      // Blob storage — get a signed download URL
+      fileUrl = await getFileUrl(entry.originalFilePath);
+    } else {
+      fileUrl = `/api/uploads/${entry.originalFilePath}`;
+    }
+  }
 
   return (
     <main className="p-8">
