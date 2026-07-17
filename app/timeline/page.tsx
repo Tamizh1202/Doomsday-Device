@@ -183,9 +183,8 @@ function AiResultsSummary({ events }: { events: TimelineEventItem[] }) {
     { icon: "👥", label: "People Mentioned", count: d.peopleMentioned as number | undefined },
     { icon: "⚖️",  label: "Decisions",       count: d.decisionCount as number | undefined },
   ].filter((i) => i.count != null && (i.count as number) > 0);
-
   if (items.length === 0) return null;
-
+  
   return (
     <div className="border-t border-gray-100 pt-3 mt-3">
       <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">AI Results</p>

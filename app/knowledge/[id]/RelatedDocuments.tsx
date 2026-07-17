@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { RelatedDocumentResult } from "@/lib/services/embeddings/similarityService";
+import { getRelatedDocuments, type RelatedDocumentResult } from "@/lib/services/embeddings/similarityService";
 
 const FILE_ICONS: Record<string, string> = {
   image: "🖼️", pdf: "📄", docx: "📝", text: "📋", "plain-text": "📋",
@@ -12,11 +12,12 @@ function formatDate(date: Date | string) {
 }
 
 async function fetchRelated(entryId: string): Promise<RelatedDocumentResult[]> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const res = await fetch(`${base}/api/knowledge/${entryId}/related`, { cache: "no-store" });
-  if (!res.ok) return [];
-  const data = await res.json();
-  return data.related ?? [];
+  try {
+    return await getRelatedDocuments(entryId);
+  } catch (err) {
+    console.error(`[RelatedDocuments] Failed to load related docs for ${entryId}:`, err);
+    return [];
+  }
 }
 
 export async function RelatedDocuments({ entryId }: { entryId: string }) {
