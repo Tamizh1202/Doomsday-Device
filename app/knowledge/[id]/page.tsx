@@ -1,31 +1,28 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import type { KnowledgeEntryRow } from "@/types/knowledge";
 import type { KnowledgeExtraction } from "@prisma/client";
 import { ExtractionPanel } from "./ExtractionPanel";
 import { ModuleBadges } from "./ModuleBadges";
 import { RelatedDocuments } from "./RelatedDocuments";
 import { PipelineStatus } from "./PipelineStatus";
-import { getFileUrl } from "@/lib/services/knowledge/knowledgeService";
+import { getFileUrl, getKnowledgeEntry, type KnowledgeEntryWithProject } from "@/lib/services/knowledge/knowledgeService";
+import { getExtraction as fetchExtraction } from "@/lib/services/knowledge/extractionService";
 
-async function getEntry(id: string): Promise<KnowledgeEntryRow | null> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const res = await fetch(`${base}/api/knowledge/${id}`, { cache: "no-store" });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.entry ?? null;
+async function getEntry(id: string): Promise<KnowledgeEntryWithProject | null> {
+  return getKnowledgeEntry(id);
 }
 
 async function getExtraction(id: string): Promise<KnowledgeExtraction | null> {
-  const base = process.env.NEXT_PUBLIC_BASE_URL ?? "http://localhost:3000";
-  const res = await fetch(`${base}/api/knowledge/${id}/extraction`, { cache: "no-store" });
-  if (!res.ok) return null;
-  const data = await res.json();
-  return data.extraction ?? null;
+  try {
+    return await fetchExtraction(id);
+  } catch (err) {
+    console.error(`[KnowledgePage] Failed to load extraction for ${id}:`, err);
+    return null;
+  }
 }
 
-function formatDateTime(iso: string) {
-  return new Date(iso).toLocaleString("en-GB", {
+function formatDateTime(date: Date | string) {
+  return new Date(date).toLocaleString("en-GB", {
     day: "2-digit", month: "short", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
@@ -45,7 +42,12 @@ export default async function KnowledgeDetailPage({
   if (entry.originalFilePath) {
     if (entry.originalFilePath.startsWith("http")) {
       // Blob storage — get a signed download URL
-      fileUrl = await getFileUrl(entry.originalFilePath);
+      try {
+        fileUrl = await getFileUrl(entry.originalFilePath);
+      } catch (err) {
+        console.error(`[KnowledgePage] Failed to get file URL for ${id}:`, err);
+        fileUrl = null;
+      }
     } else {
       fileUrl = `/api/uploads/${entry.originalFilePath}`;
     }
