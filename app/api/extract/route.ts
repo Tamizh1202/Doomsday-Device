@@ -10,8 +10,8 @@ import { createEvent, TimelineEventType } from "@/lib/services/timeline/timeline
 export const runtime = "nodejs";
 export const maxDuration = 60;
 
-function triggerExtraction(entryId: string, masterTranscript: string) {
-  runExtraction(entryId, masterTranscript)
+async function triggerExtraction(entryId: string, masterTranscript: string) {
+  await runExtraction(entryId, masterTranscript)
     .then(async (extraction) => {
       await runModuleAssignment(entryId, masterTranscript);
       // Only generate embeddings if extraction succeeded
@@ -86,7 +86,6 @@ export async function POST(req: NextRequest) {
       });
 
       console.log("[API] Processing complete. Triggering knowledge extraction...");
-      triggerExtraction(entry.id, result.extractedText);
       createEvent({
         projectId: entry.projectId,
         entryId: entry.id,
@@ -95,6 +94,7 @@ export async function POST(req: NextRequest) {
         description: { sourceType: entry.sourceType, uploadedBy },
         actor: uploadedBy,
       }).catch(() => {});
+      await triggerExtraction(entry.id, result.extractedText);
 
       return NextResponse.json({ result, entryId: entry.id });
     }
@@ -133,7 +133,6 @@ export async function POST(req: NextRequest) {
     });
 
     console.log(`[API] Processing complete. Knowledge Entry ID: ${entry.id}. Triggering knowledge extraction...`);
-    triggerExtraction(entry.id, result.extractedText);
     createEvent({
       projectId: entry.projectId,
       entryId: entry.id,
@@ -142,6 +141,7 @@ export async function POST(req: NextRequest) {
       description: { sourceType: entry.sourceType, uploadedBy },
       actor: uploadedBy,
     }).catch(() => {});
+    await triggerExtraction(entry.id, result.extractedText);
 
     return NextResponse.json({ result, entryId: entry.id });
   } catch (err) {
