@@ -5,7 +5,7 @@ import { ExtractionPanel } from "./ExtractionPanel";
 import { ModuleBadges } from "./ModuleBadges";
 import { RelatedDocuments } from "./RelatedDocuments";
 import { PipelineStatus } from "./PipelineStatus";
-import { getFileUrl, getKnowledgeEntry, type KnowledgeEntryWithProject } from "@/lib/services/knowledge/knowledgeService";
+import { getKnowledgeEntry, type KnowledgeEntryWithProject } from "@/lib/services/knowledge/knowledgeService";
 import { getExtraction as fetchExtraction } from "@/lib/services/knowledge/extractionService";
 
 async function getEntry(id: string): Promise<KnowledgeEntryWithProject | null> {
@@ -38,20 +38,9 @@ export default async function KnowledgeDetailPage({
   if (!entry) notFound();
 
   const hasFile = entry.originalFilePath && entry.originalFilePath.length > 0;
-  let fileUrl: string | null = null;
-  if (entry.originalFilePath) {
-    if (entry.originalFilePath.startsWith("http")) {
-      // Blob storage — get a signed download URL
-      try {
-        fileUrl = await getFileUrl(entry.originalFilePath);
-      } catch (err) {
-        console.error(`[KnowledgePage] Failed to get file URL for ${id}:`, err);
-        fileUrl = null;
-      }
-    } else {
-      fileUrl = `/api/uploads/${entry.originalFilePath}`;
-    }
-  }
+  const fileUrl = hasFile
+    ? `/api/uploads/${encodeURIComponent(entry.originalFilePath)}`
+    : null;
 
   return (
     <main className="p-8">

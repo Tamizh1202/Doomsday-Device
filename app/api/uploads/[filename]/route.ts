@@ -15,7 +15,8 @@ export async function GET(
 
     const buffer = await readStoredFile(filename);
 
-    const ext = filename.split(".").pop()?.toLowerCase() ?? "";
+    const displayName = filename.split("/").pop() ?? filename;
+    const ext = displayName.split(".").pop()?.toLowerCase() ?? "";
     const contentTypeMap: Record<string, string> = {
       pdf: "application/pdf",
       png: "image/png",
@@ -30,7 +31,7 @@ export async function GET(
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": contentType,
-        "Content-Disposition": `inline; filename="${filename}"`,
+        "Content-Disposition": `inline; filename="${displayName}"`,
       },
     });
   } catch (err) {

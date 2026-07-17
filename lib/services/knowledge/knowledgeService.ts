@@ -38,29 +38,20 @@ export async function saveFile(buffer: Buffer, filename: string): Promise<string
 
 /**
  * Read a stored file.
- * - If storedFilename is a blob URL, generate a signed download URL and fetch it.
+ * - If storedFilename is a blob URL, fetch its bytes server-side using the
+ *   read-write token (blobs are uploaded with access: "private", so the raw
+ *   URL is not publicly fetchable — it must go through the Blob SDK).
  * - Otherwise read from local disk.
  */
 export async function readStoredFile(storedFilename: string): Promise<Buffer> {
   if (storedFilename.startsWith("http://") || storedFilename.startsWith("https://")) {
-    const { getDownloadUrl } = await import("@vercel/blob");
-    const signedUrl = getDownloadUrl(storedFilename);
-    const res = await fetch(signedUrl);
-    if (!res.ok) throw new Error(`Failed to fetch blob: ${res.statusText}`);
-    return Buffer.from(await res.arrayBuffer());
+    const { get } = await import("@vercel/blob");
+    const result = await get(storedFilename, { access: "private" });
+    if (!result) throw new Error("Blob not found.");
+    return Buffer.from(await new Response(result.stream).arrayBuffer());
   }
   const fullPath = path.join(UPLOADS_DIR, storedFilename);
   return fs.readFile(fullPath);
-}
-
-/**
- * Generate a signed URL for serving a private blob to the browser.
- * Returns null for local files (served via /api/uploads instead).
- */
-export async function getFileUrl(storedFilename: string): Promise<string | null> {
-  if (!storedFilename.startsWith("http")) return null;
-  const { getDownloadUrl } = await import("@vercel/blob");
-  return getDownloadUrl(storedFilename);
 }
 
 /** Get or create the default project. */
