@@ -1,8 +1,6 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/database/prisma";
 import type { KnowledgeExtraction } from "@prisma/client";
-
-const EMBEDDING_MODEL = "gemini-embedding-001";
+import { getEmbeddingModel, EMBEDDING_MODEL } from "@/lib/ai/geminiConfig";
 
 function buildEmbeddingText(extraction: KnowledgeExtraction): string {
   const parts: string[] = [];
@@ -48,14 +46,10 @@ export async function generateAndStoreEmbedding(
   knowledgeEntryId: string,
   extraction: KnowledgeExtraction
 ): Promise<number[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
-
   const text = buildEmbeddingText(extraction);
   if (!text.trim()) throw new Error("No embeddable content in extraction.");
 
-  const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const model = getEmbeddingModel();
 
   const result = await model.embedContent(text);
   const embedding = result.embedding.values;

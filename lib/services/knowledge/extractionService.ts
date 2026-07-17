@@ -1,7 +1,8 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import type { GenerativeModel } from "@google/generative-ai";
 import { prisma } from "@/lib/database/prisma";
 import type { KnowledgeExtraction } from "@prisma/client";
 import { createEvent, TimelineEventType } from "@/lib/services/timeline/timelineService";
+import { getGenerationModel, DETERMINISTIC_GENERATION_CONFIG } from "@/lib/ai/geminiConfig";
 
 // ── Prompt ────────────────────────────────────────────────────────────────────
 
@@ -109,13 +110,13 @@ function cleanJson(raw: string): string {
 }
 
 async function callGeminiOnce(
-  generativeModel: ReturnType<InstanceType<typeof GoogleGenerativeAI>["getGenerativeModel"]>,
+  generativeModel: GenerativeModel,
   masterTranscript: string,
   attempt: number
 ): Promise<ExtractionPayload> {
   const response = await generativeModel.generateContent({
     contents: [{ role: "user", parts: [{ text: EXTRACTION_PROMPT + masterTranscript }] }],
-    generationConfig: { responseMimeType: "application/json" },
+    generationConfig: { ...DETERMINISTIC_GENERATION_CONFIG, responseMimeType: "application/json" },
   });
 
   const raw = response.response.text();
@@ -146,12 +147,7 @@ async function callGemini(
   projectId: string,
   entryId: string
 ): Promise<ExtractionPayload> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  const model = process.env.GEMINI_MODEL;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
-  if (!model) throw new Error("GEMINI_MODEL is not set.");
-
-  const generativeModel = new GoogleGenerativeAI(apiKey).getGenerativeModel({ model });
+  const generativeModel = getGenerationModel();
 
   try {
     return await callGeminiOnce(generativeModel, masterTranscript, 1);

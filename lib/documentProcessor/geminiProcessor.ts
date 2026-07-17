@@ -1,13 +1,15 @@
-import {
-  GoogleGenerativeAI,
-  type Part,
-} from "@google/generative-ai";
+import type { Part } from "@google/generative-ai";
 import type {
   DocumentProcessorInterface,
   ExtractionResult,
   ProcessorInput,
   SupportedFileType,
 } from "@/types/extraction";
+import {
+  getGenerationModel,
+  getGenerationModelName,
+  DETERMINISTIC_GENERATION_CONFIG,
+} from "@/lib/ai/geminiConfig";
 
 /**
  * Core extraction rules injected into every prompt.
@@ -370,15 +372,9 @@ export function buildTranscriptHeader(opts: {
 
 export class GeminiProcessor implements DocumentProcessorInterface {
   private readonly model: string;
-  private readonly client: GoogleGenerativeAI;
 
   constructor() {
-    const apiKey = process.env.GEMINI_API_KEY;
-    const model = process.env.GEMINI_MODEL;
-    if (!apiKey) throw new Error("GEMINI_API_KEY is not set in environment variables.");
-    if (!model) throw new Error("GEMINI_MODEL is not set in environment variables.");
-    this.client = new GoogleGenerativeAI(apiKey);
-    this.model = model;
+    this.model = getGenerationModelName();
   }
 
   async process(input: ProcessorInput): Promise<ExtractionResult> {
@@ -452,8 +448,11 @@ export class GeminiProcessor implements DocumentProcessorInterface {
     }
 
     console.log("[GeminiProcessor] Waiting for Gemini response...");
-    const generativeModel = this.client.getGenerativeModel({ model: this.model });
-    const response = await generativeModel.generateContent({ contents: [{ role: "user", parts }] });
+    const generativeModel = getGenerationModel();
+    const response = await generativeModel.generateContent({
+      contents: [{ role: "user", parts }],
+      generationConfig: DETERMINISTIC_GENERATION_CONFIG,
+    });
     const geminiOutput = response.response.text().trim();
 
     // Prepend application-generated metadata header

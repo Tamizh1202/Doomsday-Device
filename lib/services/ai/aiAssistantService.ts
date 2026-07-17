@@ -1,9 +1,7 @@
-import { GoogleGenerativeAI } from "@google/generative-ai";
 import { prisma } from "@/lib/database/prisma";
 import { getDefaultProject } from "@/lib/services/knowledge/knowledgeService";
+import { getGenerationModel, getEmbeddingModel, DETERMINISTIC_GENERATION_CONFIG } from "@/lib/ai/geminiConfig";
 
-const EMBEDDING_MODEL = "gemini-embedding-001";
-const GENERATION_MODEL = "gemini-1.5-flash";
 const TOP_K = 5;
 const MIN_SCORE = 0.3;
 
@@ -38,10 +36,7 @@ type RetrievedEntry = {
 // ── Embedding ──────────────────────────────────────────────────────────────────
 
 async function embedQuestion(question: string): Promise<number[]> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
-  const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({ model: EMBEDDING_MODEL });
+  const model = getEmbeddingModel();
   const result = await model.embedContent(question);
   return result.embedding.values;
 }
@@ -175,10 +170,7 @@ Answer (based strictly on the knowledge above):`;
 // ── Generation ─────────────────────────────────────────────────────────────────
 
 async function generateAnswer(prompt: string): Promise<string> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("GEMINI_API_KEY is not set.");
-  const client = new GoogleGenerativeAI(apiKey);
-  const model = client.getGenerativeModel({ model: GENERATION_MODEL });
+  const model = getGenerationModel({ generationConfig: DETERMINISTIC_GENERATION_CONFIG });
   const result = await model.generateContent(prompt);
   return result.response.text().trim();
 }

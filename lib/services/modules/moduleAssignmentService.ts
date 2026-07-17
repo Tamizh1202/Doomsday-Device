@@ -1,7 +1,7 @@
-  import { GoogleGenerativeAI } from "@google/generative-ai";
 import { getModulesForProject, upsertModule, assignEntryToModules } from "./moduleService";
 import { prisma } from "@/lib/database/prisma";
 import { createEvent, TimelineEventType } from "@/lib/services/timeline/timelineService";
+import { getGenerationModel, DETERMINISTIC_GENERATION_CONFIG } from "@/lib/ai/geminiConfig";
 
 const ASSIGNMENT_PROMPT = (
   transcript: string,
@@ -65,14 +65,8 @@ export async function runModuleAssignment(
 
     const existingModules = await getModulesForProject(entry.projectId);
 
-    const apiKey = process.env.GEMINI_API_KEY;
-    const modelName = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
-    if (!apiKey) return;
-
-    const genAI = new GoogleGenerativeAI(apiKey);
-    const model = genAI.getGenerativeModel({
-      model: modelName,
-      generationConfig: { responseMimeType: "application/json" },
+    const model = getGenerationModel({
+      generationConfig: { ...DETERMINISTIC_GENERATION_CONFIG, responseMimeType: "application/json" },
     });
 
     const prompt = ASSIGNMENT_PROMPT(
